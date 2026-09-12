@@ -557,77 +557,6 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
             <ResultsTable result={result} goal={goal} topN={topN} />
           </div>
 
-          <div className="card">
-            <div className="card-title">Mass judging vs. expert judging</div>
-            <div className="explainer">
-              <p>
-                Pairwise judging (CrowdBT) is a <strong>mass judging</strong> method. It works
-                by aggregating many simple "A or B?" decisions from non-expert judges into a
-                crowd-sourced ranking. Each comparison is low-information, but volume compensates.
-                It excels at the scale problem: ensuring every project gets seen.
-              </p>
-              <p>
-                It is much weaker at precision. Rank accuracy looks high (often 80%+) but this is
-                driven by easy separations in the bottom half of the leaderboard. At the top,
-                where projects are close in quality, pairwise comparison struggles to distinguish
-                #1 from #3.
-              </p>
-              <p>
-                For the precision problem (picking actual winners), use a second stage with
-                <strong> expert judging</strong> methods:
-              </p>
-              <ul>
-                <li><strong>Finals presentations</strong> to a panel, where the top 3-5 teams present in depth</li>
-                <li><strong>Judge deliberation</strong> where judges discuss the shortlisted projects and vote</li>
-                <li><strong>Ranked-choice voting</strong> among the shortlist for a more nuanced final ordering</li>
-              </ul>
-              <p>
-                This two-stage approach is how most well-run hackathons work: pairwise
-                judging handles the scale problem, and a focused final round with expert
-                judges handles the precision problem.
-              </p>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Understanding the metrics</div>
-            <div className="explainer">
-              <p>
-                The three accuracy metrics measure different things and have very different
-                difficulty levels:
-              </p>
-              <dl className="metric-list">
-                <dt>Rank accuracy</dt>
-                <dd>
-                  How well the overall ordering matches reality, measured across all projects.
-                  This is always the highest number because it is inflated by easy separations
-                  in the bottom half of the leaderboard. An 85% rank accuracy does not mean
-                  the top 5 are 85% correct; it means the algorithm nailed the bottom half and
-                  got some of the top right.
-                </dd>
-                <dt>Top N overlap</dt>
-                <dd>
-                  How many of the true top N projects appear in your predicted top N, regardless
-                  of order within those N. Harder than rank accuracy because it only measures the
-                  top of the leaderboard, where projects tend to be closest in quality. Whether
-                  this is easier or harder than rank accuracy depends on N and the number of
-                  judges: with enough judges, top-5 overlap can approach rank accuracy, but top-1
-                  and top-3 typically lag behind.
-                </dd>
-                <dt>Top 1 correct</dt>
-                <dd>
-                  Whether the #1 project is correctly identified. This is a single yes/no
-                  question per simulation run, making it the hardest metric by far. Even with
-                  many judges, the true #1 and #2 are often close in quality, so a few noisy
-                  comparisons can swap them. Expect this to plateau well below 100%.
-                </dd>
-              </dl>
-              <p>
-                This is why pairwise judging is best used as a shortlisting tool (top N overlap)
-                rather than a precision instrument for picking a single winner (top 1).
-              </p>
-            </div>
-          </div>
         </>
       )}
     </>
@@ -776,6 +705,38 @@ export function Planner() {
         </a>
       </div>
 
+      <div className="card">
+        <div className="card-title">Mass judging vs. expert judging</div>
+        <div className="explainer">
+          <p>
+            Pairwise judging (CrowdBT) is a <strong>mass judging</strong> method. It works
+            by aggregating many simple "A or B?" decisions from non-expert judges into a
+            crowd-sourced ranking. Each comparison is low-information, but volume compensates.
+            It excels at the scale problem: ensuring every project gets seen.
+          </p>
+          <p>
+            It is much weaker at precision. Rank accuracy looks high (often 80%+) but this is
+            driven by easy separations in the bottom half of the leaderboard. At the top,
+            where projects are close in quality, pairwise comparison struggles to distinguish
+            #1 from #3.
+          </p>
+          <p>
+            For the precision problem (picking actual winners), use a second stage with
+            <strong> expert judging</strong> methods:
+          </p>
+          <ul>
+            <li><strong>Finals presentations</strong> to a panel, where the top 3-5 teams present in depth</li>
+            <li><strong>Judge deliberation</strong> where judges discuss the shortlisted projects and vote</li>
+            <li><strong>Ranked-choice voting</strong> among the shortlist for a more nuanced final ordering</li>
+          </ul>
+          <p>
+            This two-stage approach is how most well-run hackathons work: pairwise
+            judging handles the scale problem, and a focused final round with expert
+            judges handles the precision problem.
+          </p>
+        </div>
+      </div>
+
       <div className="mode-toggle">
         <button className={`mode-btn ${mode === "recommend" ? "active" : ""}`} onClick={() => setMode("recommend")}>
           Recommend
@@ -809,6 +770,46 @@ export function Planner() {
       </div>
 
       {mode === "custom" ? <CustomMode goal={goal} topN={topN} /> : <RecommendMode goal={goal} topN={topN} />}
+
+      <div className="card">
+        <div className="card-title">Understanding the metrics</div>
+        <div className="explainer">
+          <p>
+            The three accuracy metrics measure different things and have very different
+            difficulty levels:
+          </p>
+          <dl className="metric-list">
+            <dt>Rank accuracy</dt>
+            <dd>
+              How well the overall ordering matches reality, measured across all projects.
+              This is always the highest number because it is inflated by easy separations
+              in the bottom half of the leaderboard. An 85% rank accuracy does not mean
+              the top 5 are 85% correct; it means the algorithm nailed the bottom half and
+              got some of the top right.
+            </dd>
+            <dt>Top N overlap</dt>
+            <dd>
+              How many of the true top N projects appear in your predicted top N, regardless
+              of order within those N. Harder than rank accuracy because it only measures the
+              top of the leaderboard, where projects tend to be closest in quality. Whether
+              this is easier or harder than rank accuracy depends on N and the number of
+              judges: with enough judges, top-5 overlap can approach rank accuracy, but top-1
+              and top-3 typically lag behind.
+            </dd>
+            <dt>Top 1 correct</dt>
+            <dd>
+              Whether the #1 project is correctly identified. This is a single yes/no
+              question per simulation run, making it the hardest metric by far. Even with
+              many judges, the true #1 and #2 are often close in quality, so a few noisy
+              comparisons can swap them. Expect this to plateau well below 100%.
+            </dd>
+          </dl>
+          <p>
+            This is why pairwise judging is best used as a shortlisting tool (top N overlap)
+            rather than a precision instrument for picking a single winner (top 1).
+          </p>
+        </div>
+      </div>
 
       <div className="footer">
         Powered by <a href="https://github.com/skelston/gavel2">Gavel 2</a>.
