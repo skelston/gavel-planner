@@ -289,16 +289,24 @@ function getVerdict(result: SimResult, goal: Goal, topN: TopN): Verdict | null {
   return "weak";
 }
 
-function getVerdictCopy(verdict: Verdict, goal: Goal, topN: TopN, overlap: number, rankAcc: number, totalVotes: number, nJudges: number): { label: string; color: string; body: string } {
+function getVerdictCopy(verdict: Verdict, goal: Goal, topN: TopN, snap: SimSnapshot, totalVotes: number, nJudges: number): { label: string; color: string; body: string } {
   const labels: Record<Verdict, string> = { strong: "Strong confidence", good: "Good confidence", fair: "Moderate confidence", weak: "Low confidence" };
   const colors: Record<Verdict, string> = { strong: "var(--mint)", good: "var(--indigo)", fair: "var(--amber)", weak: "var(--red)" };
 
+  const overlap = getOverlap(snap, topN);
+  const rankAcc = snap.rankAccuracy;
   const stats = `With ${totalVotes} total votes across ${nJudges} judges, `;
-  const metric = goal === "shortlist"
-    ? topN === 1
+
+  let metric: string;
+  if (goal === "shortlist") {
+    metric = topN === 1
       ? `the true #1 project is correctly identified ${(overlap * 100).toFixed(0)}% of the time.`
-      : `on average ${overlap.toFixed(1)} of the true top ${topN} projects will appear in your top ${topN}.`
-    : `rankings reach ${(rankAcc * 100).toFixed(0)}% accuracy.`;
+      : `on average ${overlap.toFixed(1)} of the true top ${topN} projects will appear in your top ${topN}.`;
+  } else {
+    metric = `overall rank accuracy is ${(rankAcc * 100).toFixed(0)}%. `
+      + `However, this is driven largely by easy separations in the bottom half. `
+      + `At the top: ${snap.top5Overlap.toFixed(1)}/5 of the true top 5 are correctly identified.`;
+  }
 
   let advice = "";
   if (verdict === "weak") {
@@ -321,8 +329,7 @@ function VerdictCard({ result, goal, topN }: { result: SimResult; goal: Goal; to
   const verdict = getVerdict(result, goal, topN);
   if (!verdict) return null;
 
-  const overlap = getOverlap(final, topN);
-  const { label, color, body } = getVerdictCopy(verdict, goal, topN, overlap, final.rankAccuracy, result.totalVotes, result.nJudges);
+  const { label, color, body } = getVerdictCopy(verdict, goal, topN, final, result.totalVotes, result.nJudges);
 
   return (
     <div className={`verdict ${verdict}`}>
@@ -519,23 +526,29 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
             <p className="card-desc">
               {goal === "shortlist"
                 ? `Top ${topN} ratio is the key metric: what fraction of the true top ${topN} projects appear in your predicted top ${topN}. Averaged over 100 simulated events.`
-                : "Rank accuracy and sigma are the key metrics. Averaged over 100 simulated events."}
+                : "Rank accuracy reflects overall ordering (inflated by easy bottom-half separations). Check top-N overlap for how reliable the top actually is. Averaged over 100 simulated events."}
             </p>
             <ResultsTable result={result} goal={goal} topN={topN} />
           </div>
 
           <div className="card">
-            <div className="card-title">Pairwise judging is a first pass, not the final answer</div>
+            <div className="card-title">Mass judging vs. expert judging</div>
             <div className="explainer">
               <p>
-                CrowdBT excels at separating tiers: top vs. middle vs. bottom.
-                It is much less reliable at ordering within a tier, because projects
-                close in quality produce noisy pairwise comparisons. Two judges shown
-                the same pair may genuinely disagree.
+                Pairwise judging (CrowdBT) is a <strong>mass judging</strong> method. It works
+                by aggregating many simple "A or B?" decisions from non-expert judges into a
+                crowd-sourced ranking. Each comparison is low-information, but volume compensates.
+                It excels at the scale problem: ensuring every project gets seen.
               </p>
               <p>
-                Use pairwise judging to narrow the field to a shortlist, then decide
-                winners with a second stage:
+                It is much weaker at precision. Rank accuracy looks high (often 80%+) but this is
+                driven by easy separations in the bottom half of the leaderboard. At the top,
+                where projects are close in quality, pairwise comparison struggles to distinguish
+                #1 from #3.
+              </p>
+              <p>
+                For the precision problem (picking actual winners), use a second stage with
+                <strong> expert judging</strong> methods:
               </p>
               <ul>
                 <li><strong>Finals presentations</strong> to a panel, where the top 3-5 teams present in depth</li>
@@ -544,8 +557,8 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
               </ul>
               <p>
                 This two-stage approach is how most well-run hackathons work: pairwise
-                judging handles the scale problem (every project gets seen), and a focused
-                final round handles the precision problem (picking the actual winners).
+                judging handles the scale problem, and a focused final round with expert
+                judges handles the precision problem.
               </p>
             </div>
           </div>
@@ -561,9 +574,10 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
                 <dt>Rank accuracy</dt>
                 <dd>
                   How well the overall ordering matches reality, measured across all projects.
-                  This tends to be the highest number because it benefits from easy separations
-                  in the middle and bottom of the leaderboard, where project quality differences
-                  are large.
+                  This is always the highest number because it is inflated by easy separations
+                  in the bottom half of the leaderboard. An 85% rank accuracy does not mean
+                  the top 5 are 85% correct; it means the algorithm nailed the bottom half and
+                  got some of the top right.
                 </dd>
                 <dt>Top N overlap</dt>
                 <dd>
