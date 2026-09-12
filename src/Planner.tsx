@@ -3,6 +3,7 @@ import { simulate, type SimResult, type SimSnapshot } from "./lib/simulate";
 
 type Mode = "custom" | "recommend";
 type Goal = "shortlist" | "ranking";
+type TopN = 1 | 3 | 5;
 
 function InputField({
   label,
@@ -209,17 +210,24 @@ function ResultsTable({ result }: { result: SimResult }) {
   );
 }
 
-function getVerdict(result: SimResult, goal: Goal) {
+function getOverlap(snap: SimSnapshot, topN: TopN): number {
+  if (topN === 1) return snap.top1Pct;
+  if (topN === 3) return snap.top3Overlap;
+  return snap.top5Overlap;
+}
+
+function getVerdict(result: SimResult, goal: Goal, topN: TopN) {
   const final = result.snapshots[result.snapshots.length - 1];
   if (!final) return null;
 
   const sigma = final.avgSigma;
   const rankAcc = final.rankAccuracy;
-  const top3 = final.top3Overlap;
 
   if (goal === "shortlist") {
-    if (top3 >= 2.0) return "strong" as const;
-    if (top3 >= 1.5) return "good" as const;
+    const overlap = getOverlap(final, topN);
+    const ratio = overlap / topN;
+    if (ratio >= 0.67) return "strong" as const;
+    if (ratio >= 0.5) return "good" as const;
     return "weak" as const;
   }
   if (sigma < 0.3 && rankAcc > 0.85) return "strong" as const;
@@ -227,17 +235,17 @@ function getVerdict(result: SimResult, goal: Goal) {
   return "weak" as const;
 }
 
-function Verdict({ result, goal }: { result: SimResult; goal: Goal }) {
+function Verdict({ result, goal, topN }: { result: SimResult; goal: Goal; topN: TopN }) {
   const final = result.snapshots[result.snapshots.length - 1];
   if (!final) return null;
 
-  const verdict = getVerdict(result, goal);
+  const verdict = getVerdict(result, goal, topN);
 
   const labels = { strong: "Strong confidence", good: "Moderate confidence", weak: "Low confidence" };
   const colors = { strong: "var(--mint)", good: "var(--indigo)", weak: "var(--red)" };
 
   const rankAcc = final.rankAccuracy;
-  const top3 = final.top3Overlap;
+  const overlap = getOverlap(final, topN);
 
   return (
     <div className={`verdict ${verdict}`}>
@@ -247,7 +255,9 @@ function Verdict({ result, goal }: { result: SimResult; goal: Goal }) {
         <div className="verdict-body">
           With {result.totalVotes} total votes across {result.nJudges} judges,{" "}
           {goal === "shortlist"
-            ? `on average ${top3.toFixed(1)} of the true top 3 projects will appear in your top 3.`
+            ? topN === 1
+              ? `the true #1 project is correctly identified ${(overlap * 100).toFixed(0)}% of the time.`
+              : `on average ${overlap.toFixed(1)} of the true top ${topN} projects will appear in your top ${topN}.`
             : `rankings reach ${(rankAcc * 100).toFixed(0)}% accuracy.`}
           {verdict === "weak" && " Consider adding more judges or extending the judging window."}
           {verdict === "strong" && " This is a reliable setup for identifying winners."}
@@ -260,24 +270,24 @@ function Verdict({ result, goal }: { result: SimResult; goal: Goal }) {
   );
 }
 
-function meetsThreshold(result: SimResult, goal: Goal): boolean {
-  const v = getVerdict(result, goal);
+function meetsThreshold(result: SimResult, goal: Goal, topN: TopN): boolean {
+  const v = getVerdict(result, goal, topN);
   return v === "strong" || v === "good";
 }
 
-function findMinJudges(teams: number, minutes: number, perVote: number, goal: Goal): { judges: number; result: SimResult } {
+function findMinJudges(teams: number, minutes: number, perVote: number, goal: Goal, topN: TopN): { judges: number; result: SimResult } {
   let lo = 2;
   let hi = Math.max(4, Math.ceil(teams * 1.5));
   let bestJudges = hi;
   let bestResult = simulate(teams, hi, minutes, perVote, 60);
 
-  if (!meetsThreshold(bestResult, goal)) {
-    while (hi <= 100 && !meetsThreshold(simulate(teams, hi, minutes, perVote, 60), goal)) {
+  if (!meetsThreshold(bestResult, goal, topN)) {
+    while (hi <= 100 && !meetsThreshold(simulate(teams, hi, minutes, perVote, 60), goal, topN)) {
       hi = Math.min(hi * 2, 100);
     }
     bestResult = simulate(teams, hi, minutes, perVote, 60);
     bestJudges = hi;
-    if (!meetsThreshold(bestResult, goal)) {
+    if (!meetsThreshold(bestResult, goal, topN)) {
       return { judges: hi, result: bestResult };
     }
   }
@@ -285,7 +295,7 @@ function findMinJudges(teams: number, minutes: number, perVote: number, goal: Go
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
     const r = simulate(teams, mid, minutes, perVote, 60);
-    if (meetsThreshold(r, goal)) {
+    if (meetsThreshold(r, goal, topN)) {
       hi = mid;
       bestJudges = mid;
       bestResult = r;
@@ -297,7 +307,7 @@ function findMinJudges(teams: number, minutes: number, perVote: number, goal: Go
   return { judges: bestJudges, result: bestResult };
 }
 
-function CustomMode({ goal }: { goal: Goal }) {
+function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
   const [teams, setTeams] = useState(16);
   const [judges, setJudges] = useState(10);
   const [minutes, setMinutes] = useState(120);
@@ -337,7 +347,7 @@ function CustomMode({ goal }: { goal: Goal }) {
 
       {result && (
         <>
-          <Verdict result={result} goal={goal} />
+          <Verdict result={result} goal={goal} topN={topN} />
 
           <div className="card">
             <div className="card-title">Accuracy over time</div>
@@ -398,7 +408,7 @@ function CustomMode({ goal }: { goal: Goal }) {
   );
 }
 
-function RecommendMode({ goal }: { goal: Goal }) {
+function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
   const [teams, setTeams] = useState(16);
   const [minutes, setMinutes] = useState(120);
   const [perVote, setPerVote] = useState(10);
@@ -408,7 +418,7 @@ function RecommendMode({ goal }: { goal: Goal }) {
   function handleRun() {
     setRunning(true);
     setTimeout(() => {
-      setRecommendation(findMinJudges(teams, minutes, perVote, goal));
+      setRecommendation(findMinJudges(teams, minutes, perVote, goal, topN));
       setRunning(false);
     }, 50);
   }
@@ -420,7 +430,9 @@ function RecommendMode({ goal }: { goal: Goal }) {
         <p className="card-desc">
           Enter your event size and time window. The planner will find the minimum number of
           judges needed for{" "}
-          {goal === "shortlist" ? "reliably identifying the top projects" : "accurate full rankings"}.
+          {goal === "shortlist"
+            ? `reliably identifying the top ${topN} project${topN > 1 ? "s" : ""}`
+            : "accurate full rankings"}.
         </p>
         <div className="fields">
           <InputField label="Teams" value={teams} onChange={setTeams} min={4} max={200} />
@@ -434,56 +446,62 @@ function RecommendMode({ goal }: { goal: Goal }) {
         </div>
       </div>
 
-      {recommendation && (
-        <>
-          {meetsThreshold(recommendation.result, goal) ? (
+      {recommendation && (() => {
+        const final = recommendation.result.snapshots[recommendation.result.snapshots.length - 1];
+        const overlap = getOverlap(final, topN);
+        return (
+          <>
+            {meetsThreshold(recommendation.result, goal, topN) ? (
+              <div className="card">
+                <div className="recommend-result">
+                  <div className="recommend-number" style={{ color: "var(--indigo)" }}>
+                    {recommendation.judges}
+                  </div>
+                  <div className="recommend-unit">judges minimum</div>
+                  <div className="recommend-detail">
+                    {recommendation.judges} judges x {Math.floor(minutes / perVote)} votes each
+                    = {recommendation.result.totalVotes} total votes across {minutes} minutes.
+                    {goal === "shortlist"
+                      ? topN === 1
+                        ? ` Top 1 accuracy: ${(overlap * 100).toFixed(0)}%.`
+                        : ` Top ${topN} overlap: ${overlap.toFixed(1)} / ${topN}.`
+                      : ` Rank accuracy: ${(final.rankAccuracy * 100).toFixed(0)}%.`}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="verdict searching">
+                <span className="verdict-dot" style={{ background: "var(--amber)" }} />
+                <div>
+                  <div className="verdict-label">Not enough time</div>
+                  <div className="verdict-body">
+                    Even with {recommendation.judges} judges, {minutes} minutes at {perVote} min/vote
+                    isn't enough for {goal === "shortlist" ? `reliable top-${topN} identification` : "accurate rankings"} with {teams} teams.
+                    Try increasing the judging window or reducing time per vote.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <Verdict result={recommendation.result} goal={goal} topN={topN} />
+
             <div className="card">
-              <div className="recommend-result">
-                <div className="recommend-number" style={{ color: "var(--indigo)" }}>
-                  {recommendation.judges}
-                </div>
-                <div className="recommend-unit">judges minimum</div>
-                <div className="recommend-detail">
-                  {recommendation.judges} judges x {Math.floor(minutes / perVote)} votes each
-                  = {recommendation.result.totalVotes} total votes across {minutes} minutes.
-                  {goal === "shortlist"
-                    ? ` Top 3 overlap: ${recommendation.result.snapshots[recommendation.result.snapshots.length - 1].top3Overlap.toFixed(1)} / 3.`
-                    : ` Rank accuracy: ${(recommendation.result.snapshots[recommendation.result.snapshots.length - 1].rankAccuracy * 100).toFixed(0)}%.`}
-                </div>
-              </div>
+              <div className="card-title">Accuracy over time</div>
+              <ConvergenceChart snapshots={recommendation.result.snapshots} />
             </div>
-          ) : (
-            <div className="verdict searching">
-              <span className="verdict-dot" style={{ background: "var(--amber)" }} />
-              <div>
-                <div className="verdict-label">Not enough time</div>
-                <div className="verdict-body">
-                  Even with {recommendation.judges} judges, {minutes} minutes at {perVote} min/vote
-                  isn't enough for {goal === "shortlist" ? "reliable shortlisting" : "accurate rankings"} with {teams} teams.
-                  Try increasing the judging window or the time per vote.
-                </div>
-              </div>
+
+            <div className="card">
+              <div className="card-title">Uncertainty over time</div>
+              <SigmaChart snapshots={recommendation.result.snapshots} />
             </div>
-          )}
 
-          <Verdict result={recommendation.result} goal={goal} />
-
-          <div className="card">
-            <div className="card-title">Accuracy over time</div>
-            <ConvergenceChart snapshots={recommendation.result.snapshots} />
-          </div>
-
-          <div className="card">
-            <div className="card-title">Uncertainty over time</div>
-            <SigmaChart snapshots={recommendation.result.snapshots} />
-          </div>
-
-          <div className="card">
-            <div className="card-title">Detailed results</div>
-            <ResultsTable result={recommendation.result} />
-          </div>
-        </>
-      )}
+            <div className="card">
+              <div className="card-title">Detailed results</div>
+              <ResultsTable result={recommendation.result} />
+            </div>
+          </>
+        );
+      })()}
     </>
   );
 }
@@ -491,6 +509,7 @@ function RecommendMode({ goal }: { goal: Goal }) {
 export function Planner() {
   const [mode, setMode] = useState<Mode>("recommend");
   const [goal, setGoal] = useState<Goal>("shortlist");
+  const [topN, setTopN] = useState<TopN>(3);
 
   return (
     <div className="shell">
@@ -516,14 +535,28 @@ export function Planner() {
 
       <div className="goal-toggle">
         <button className={`goal-btn ${goal === "shortlist" ? "active" : ""}`} onClick={() => setGoal("shortlist")}>
-          Shortlist (top N)
+          Shortlist
         </button>
         <button className={`goal-btn ${goal === "ranking" ? "active" : ""}`} onClick={() => setGoal("ranking")}>
           Full ranking
         </button>
+        {goal === "shortlist" && (
+          <>
+            <span style={{ color: "var(--dim)", fontSize: 12, marginLeft: 4 }}>Top</span>
+            {([1, 3, 5] as TopN[]).map((n) => (
+              <button
+                key={n}
+                className={`goal-btn ${topN === n ? "active" : ""}`}
+                onClick={() => setTopN(n)}
+              >
+                {n}
+              </button>
+            ))}
+          </>
+        )}
       </div>
 
-      {mode === "custom" ? <CustomMode goal={goal} /> : <RecommendMode goal={goal} />}
+      {mode === "custom" ? <CustomMode goal={goal} topN={topN} /> : <RecommendMode goal={goal} topN={topN} />}
 
       <div className="footer">
         Powered by <a href="https://github.com/skelston/gavel2">Gavel 2</a>.
