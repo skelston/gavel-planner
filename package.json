@@ -1,0 +1,22 @@
+{
+  "name": "gavel-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pre-event judging planner for Gavel 2",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.1",
+    "@types/react-dom": "^19.2.1",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "^5.6.3",
+    "vite": "^7.1.7"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}
