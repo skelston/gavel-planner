@@ -417,15 +417,17 @@ function CopyButton({ result, goal, topN, params }: { result: SimResult; goal: G
   );
 }
 
+const MAX_JUDGES = 50;
+
 function findMinJudges(teams: number, minutes: number, perVote: number, goal: Goal, topN: TopN): { judges: number; result: SimResult } {
   let lo = 2;
-  let hi = Math.max(4, Math.ceil(teams * 1.5));
+  let hi = Math.min(MAX_JUDGES, Math.max(4, Math.ceil(teams * 1.5)));
   let bestJudges = hi;
   let bestResult = simulate(teams, hi, minutes, perVote, 60);
 
   if (!meetsThreshold(bestResult, goal, topN)) {
-    while (hi <= 100 && !meetsThreshold(simulate(teams, hi, minutes, perVote, 60), goal, topN)) {
-      hi = Math.min(hi * 2, 100);
+    while (hi < MAX_JUDGES && !meetsThreshold(simulate(teams, hi, minutes, perVote, 60), goal, topN)) {
+      hi = Math.min(hi * 2, MAX_JUDGES);
     }
     bestResult = simulate(teams, hi, minutes, perVote, 60);
     bestJudges = hi;
@@ -657,11 +659,36 @@ function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
               <div className="verdict searching">
                 <span className="verdict-dot" style={{ background: "var(--amber)" }} />
                 <div>
-                  <div className="verdict-label">Not enough time</div>
+                  <div className="verdict-label">Consider restructuring</div>
                   <div className="verdict-body">
-                    Even with {recommendation.judges} judges, {minutes} minutes at {perVote} min/vote
-                    isn't enough for {goal === "shortlist" ? `reliable top-${topN} identification` : "accurate rankings"} with {teams} teams.
-                    Try increasing the judging window or reducing time per vote.
+                    {teams > 40 ? (
+                      <>
+                        With {teams} teams, pairwise judging alone can't reliably{" "}
+                        {goal === "shortlist" ? `identify a precise top ${topN}` : "produce accurate full rankings"}{" "}
+                        in {minutes} minutes. At this scale, consider:
+                        <ul style={{ margin: "8px 0 0 16px", lineHeight: 1.7 }}>
+                          <li>
+                            <strong>Split into heats</strong> — divide teams into {Math.ceil(teams / 30)}{" "}
+                            groups of ~{Math.round(teams / Math.ceil(teams / 30))}, each with their own judges.
+                            Advance the top few from each heat to a finals round.
+                          </li>
+                          <li>
+                            <strong>Widen the shortlist</strong> — use pairwise judging to find a top 10-15,
+                            then run finals presentations or judge deliberation to pick winners.
+                          </li>
+                          <li>
+                            <strong>Reduce time per vote</strong> — if {perVote} min feels long, even
+                            shaving a few minutes multiplies total comparisons significantly.
+                          </li>
+                        </ul>
+                      </>
+                    ) : (
+                      <>
+                        Even with {recommendation.judges} judges, {minutes} minutes at {perVote} min/vote
+                        isn't enough for {goal === "shortlist" ? `reliable top-${topN} identification` : "accurate rankings"} with {teams} teams.
+                        Try increasing the judging window, reducing time per vote, or adding more judges.
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
