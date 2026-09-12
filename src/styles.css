@@ -221,6 +221,21 @@ body {
 .btn-run:hover { background: oklch(0.48 0.2 275); }
 .btn-run:disabled { opacity: 0.5; cursor: default; }
 
+.btn-copy {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-copy:hover { border-color: var(--indigo); color: var(--text); }
+
 .vote-summary {
   font-size: 12px;
   color: var(--dim);

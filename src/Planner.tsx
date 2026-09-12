@@ -345,6 +345,78 @@ function meetsThreshold(result: SimResult, goal: Goal, topN: TopN): boolean {
   return v === "strong" || v === "good";
 }
 
+function toMarkdown(result: SimResult, goal: Goal, topN: TopN, params: { teams: number; judges: number; minutes: number; perVote: number }): string {
+  const verdict = getVerdict(result, goal, topN);
+  const final = result.snapshots[result.snapshots.length - 1];
+  const overlap = getOverlap(final, topN);
+  const labels: Record<string, string> = { strong: "Strong", good: "Good", fair: "Moderate", weak: "Low" };
+
+  const lines: string[] = [
+    `## Judging Plan`,
+    ``,
+    `| Parameter | Value |`,
+    `|---|---|`,
+    `| Teams | ${params.teams} |`,
+    `| Judges | ${params.judges} |`,
+    `| Total time | ${params.minutes} min |`,
+    `| Per vote | ${params.perVote} min |`,
+    `| Goal | ${goal === "shortlist" ? `Shortlist (top ${topN})` : "Full ranking"} |`,
+    ``,
+    `**${labels[verdict!]} confidence** — ${result.totalVotes} total votes, ${result.votesPerJudge} per judge.`,
+  ];
+
+  if (goal === "shortlist") {
+    if (topN === 1) {
+      lines.push(`Top 1 accuracy: ${(overlap * 100).toFixed(0)}%.`);
+    } else {
+      lines.push(`Top ${topN} overlap: ${overlap.toFixed(1)} / ${topN} (${(overlap / topN * 100).toFixed(0)}%).`);
+    }
+  } else {
+    lines.push(`Rank accuracy: ${(final.rankAccuracy * 100).toFixed(0)}%. Avg sigma: ${final.avgSigma.toFixed(3)}.`);
+  }
+
+  lines.push(`Coverage: avg ${result.avgAvgSeen.toFixed(1)} views per project, min ${result.avgMinSeen.toFixed(1)}.`);
+  lines.push(``);
+
+  if (goal === "shortlist") {
+    lines.push(`| Votes | Sigma | Rank acc. | Top 1 | Top ${topN} ratio |`);
+    lines.push(`|---|---|---|---|---|`);
+    for (const s of result.snapshots) {
+      const r = getOverlap(s, topN) / topN;
+      lines.push(`| ${s.votes} | ${s.avgSigma.toFixed(3)} | ${(s.rankAccuracy * 100).toFixed(0)}% | ${(s.top1Pct * 100).toFixed(0)}% | ${(r * 100).toFixed(0)}% |`);
+    }
+  } else {
+    lines.push(`| Votes | Sigma | Rank acc. | Top 1 | Top 3 | Top 5 |`);
+    lines.push(`|---|---|---|---|---|---|`);
+    for (const s of result.snapshots) {
+      lines.push(`| ${s.votes} | ${s.avgSigma.toFixed(3)} | ${(s.rankAccuracy * 100).toFixed(0)}% | ${(s.top1Pct * 100).toFixed(0)}% | ${s.top3Overlap.toFixed(1)}/3 | ${s.top5Overlap.toFixed(1)}/5 |`);
+    }
+  }
+
+  lines.push(``);
+  lines.push(`*Simulated with [Gavel Planner](https://skelston.github.io/gavel-planner) using CrowdBT (100 Monte Carlo runs).*`);
+
+  return lines.join("\n");
+}
+
+function CopyButton({ result, goal, topN, params }: { result: SimResult; goal: Goal; topN: TopN; params: { teams: number; judges: number; minutes: number; perVote: number } }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    const md = toMarkdown(result, goal, topN, params);
+    navigator.clipboard.writeText(md).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button className="btn-copy" onClick={handleCopy}>
+      {copied ? "Copied!" : "Copy as Markdown"}
+    </button>
+  );
+}
+
 function findMinJudges(teams: number, minutes: number, perVote: number, goal: Goal, topN: TopN): { judges: number; result: SimResult } {
   let lo = 2;
   let hi = Math.max(4, Math.ceil(teams * 1.5));
@@ -418,6 +490,7 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
       {result && (
         <>
           <VerdictCard result={result} goal={goal} topN={topN} />
+          <CopyButton result={result} goal={goal} topN={topN} params={{ teams, judges, minutes, perVote }} />
 
           <div className="card">
             <div className="card-title">Accuracy over time</div>
@@ -595,6 +668,7 @@ function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
             )}
 
             <VerdictCard result={recommendation.result} goal={goal} topN={topN} />
+            <CopyButton result={recommendation.result} goal={goal} topN={topN} params={{ teams, judges: recommendation.judges, minutes, perVote }} />
 
             <div className="card">
               <div className="card-title">Accuracy over time</div>
