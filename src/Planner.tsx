@@ -216,7 +216,9 @@ function getOverlap(snap: SimSnapshot, topN: TopN): number {
   return snap.top5Overlap;
 }
 
-function getVerdict(result: SimResult, goal: Goal, topN: TopN) {
+type Verdict = "strong" | "good" | "fair" | "weak";
+
+function getVerdict(result: SimResult, goal: Goal, topN: TopN): Verdict | null {
   const final = result.snapshots[result.snapshots.length - 1];
   if (!final) return null;
 
@@ -226,41 +228,59 @@ function getVerdict(result: SimResult, goal: Goal, topN: TopN) {
   if (goal === "shortlist") {
     const overlap = getOverlap(final, topN);
     const ratio = overlap / topN;
-    if (ratio >= 0.67) return "strong" as const;
-    if (ratio >= 0.5) return "good" as const;
-    return "weak" as const;
+    if (ratio >= 0.75) return "strong";
+    if (ratio >= 0.65) return "good";
+    if (ratio >= 0.55) return "fair";
+    return "weak";
   }
-  if (sigma < 0.3 && rankAcc > 0.85) return "strong" as const;
-  if (sigma < 0.5 && rankAcc > 0.75) return "good" as const;
-  return "weak" as const;
+  if (sigma < 0.3 && rankAcc > 0.85) return "strong";
+  if (sigma < 0.35 && rankAcc > 0.8) return "good";
+  if (sigma < 0.5 && rankAcc > 0.75) return "fair";
+  return "weak";
 }
 
-function Verdict({ result, goal, topN }: { result: SimResult; goal: Goal; topN: TopN }) {
+function getVerdictCopy(verdict: Verdict, goal: Goal, topN: TopN, overlap: number, rankAcc: number, totalVotes: number, nJudges: number): { label: string; color: string; body: string } {
+  const labels: Record<Verdict, string> = { strong: "Strong confidence", good: "Good confidence", fair: "Moderate confidence", weak: "Low confidence" };
+  const colors: Record<Verdict, string> = { strong: "var(--mint)", good: "var(--indigo)", fair: "var(--amber)", weak: "var(--red)" };
+
+  const stats = `With ${totalVotes} total votes across ${nJudges} judges, `;
+  const metric = goal === "shortlist"
+    ? topN === 1
+      ? `the true #1 project is correctly identified ${(overlap * 100).toFixed(0)}% of the time.`
+      : `on average ${overlap.toFixed(1)} of the true top ${topN} projects will appear in your top ${topN}.`
+    : `rankings reach ${(rankAcc * 100).toFixed(0)}% accuracy.`;
+
+  let advice = "";
+  if (verdict === "weak") {
+    advice = " Consider adding more judges or extending the judging window.";
+  } else if (verdict === "fair") {
+    advice = " Usable as a rough filter. Plan a finals round (presentations, judge deliberation, or ranked voting) to decide the actual winners.";
+  } else if (verdict === "good") {
+    advice = " Reliable for narrowing the field. A short finals round with the top projects will confirm the winners.";
+  } else {
+    advice = " Strong first-pass signal. A brief finals deliberation is still recommended for close calls at the top.";
+  }
+
+  return { label: labels[verdict], color: colors[verdict], body: stats + metric + advice };
+}
+
+function VerdictCard({ result, goal, topN }: { result: SimResult; goal: Goal; topN: TopN }) {
   const final = result.snapshots[result.snapshots.length - 1];
   if (!final) return null;
 
   const verdict = getVerdict(result, goal, topN);
+  if (!verdict) return null;
 
-  const labels = { strong: "Strong confidence", good: "Moderate confidence", weak: "Low confidence" };
-  const colors = { strong: "var(--mint)", good: "var(--indigo)", weak: "var(--red)" };
-
-  const rankAcc = final.rankAccuracy;
   const overlap = getOverlap(final, topN);
+  const { label, color, body } = getVerdictCopy(verdict, goal, topN, overlap, final.rankAccuracy, result.totalVotes, result.nJudges);
 
   return (
     <div className={`verdict ${verdict}`}>
-      <span className="verdict-dot" style={{ background: colors[verdict!] }} />
+      <span className="verdict-dot" style={{ background: color }} />
       <div>
-        <div className="verdict-label">{labels[verdict!]}</div>
+        <div className="verdict-label">{label}</div>
         <div className="verdict-body">
-          With {result.totalVotes} total votes across {result.nJudges} judges,{" "}
-          {goal === "shortlist"
-            ? topN === 1
-              ? `the true #1 project is correctly identified ${(overlap * 100).toFixed(0)}% of the time.`
-              : `on average ${overlap.toFixed(1)} of the true top ${topN} projects will appear in your top ${topN}.`
-            : `rankings reach ${(rankAcc * 100).toFixed(0)}% accuracy.`}
-          {verdict === "weak" && " Consider adding more judges or extending the judging window."}
-          {verdict === "strong" && " This is a reliable setup for identifying winners."}
+          {body}
           <span className="mono" style={{ display: "block", marginTop: 6, fontSize: 11 }}>
             Coverage: avg {result.avgAvgSeen.toFixed(1)} views per project, min {result.avgMinSeen.toFixed(1)}
           </span>
@@ -272,7 +292,7 @@ function Verdict({ result, goal, topN }: { result: SimResult; goal: Goal; topN: 
 
 function meetsThreshold(result: SimResult, goal: Goal, topN: TopN): boolean {
   const v = getVerdict(result, goal, topN);
-  return v === "strong" || v === "good";
+  return v === "strong" || v === "good" || v === "fair";
 }
 
 function findMinJudges(teams: number, minutes: number, perVote: number, goal: Goal, topN: TopN): { judges: number; result: SimResult } {
@@ -347,7 +367,7 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
 
       {result && (
         <>
-          <Verdict result={result} goal={goal} topN={topN} />
+          <VerdictCard result={result} goal={goal} topN={topN} />
 
           <div className="card">
             <div className="card-title">Accuracy over time</div>
@@ -381,24 +401,27 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
           </div>
 
           <div className="card">
-            <div className="card-title">Why not 100%?</div>
+            <div className="card-title">Pairwise judging is a first pass, not the final answer</div>
             <div className="explainer">
               <p>
-                Pairwise judging relies on human opinions, which are inherently noisy. Two
-                judges shown the same pair may disagree, especially when projects are close in
-                quality. This noise is fundamental, not a limitation of the algorithm.
+                CrowdBT excels at separating tiers: top vs. middle vs. bottom.
+                It is much less reliable at ordering within a tier, because projects
+                close in quality produce noisy pairwise comparisons. Two judges shown
+                the same pair may genuinely disagree.
               </p>
               <p>
-                Think of it this way: if you asked 10 people to rank 16 restaurants, they'd
-                mostly agree on the best and worst, but the middle would shuffle. CrowdBT is
-                doing the same thing mathematically: it correctly identifies the noise
-                (high sigma) and doesn't pretend to be more confident than the data allows.
+                Use pairwise judging to narrow the field to a shortlist, then decide
+                winners with a second stage:
               </p>
+              <ul>
+                <li><strong>Finals presentations</strong> to a panel, where the top 3-5 teams present in depth</li>
+                <li><strong>Judge deliberation</strong> where judges discuss the shortlisted projects and vote</li>
+                <li><strong>Ranked-choice voting</strong> among the shortlist for a more nuanced final ordering</li>
+              </ul>
               <p>
-                <strong>The practical implication:</strong> trust the top tier (top 3-5), not
-                exact positions. Projects ranked #3 and #4 may be interchangeable, and that's
-                fine. The algorithm is most reliable at separating tiers (top vs. middle vs.
-                bottom) and least reliable at ordering within a tier.
+                This two-stage approach is how most well-run hackathons work: pairwise
+                judging handles the scale problem (every project gets seen), and a focused
+                final round handles the precision problem (picking the actual winners).
               </p>
             </div>
           </div>
@@ -483,7 +506,7 @@ function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
               </div>
             )}
 
-            <Verdict result={recommendation.result} goal={goal} topN={topN} />
+            <VerdictCard result={recommendation.result} goal={goal} topN={topN} />
 
             <div className="card">
               <div className="card-title">Accuracy over time</div>
