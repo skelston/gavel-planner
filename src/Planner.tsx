@@ -226,8 +226,8 @@ function getVerdict(result: SimResult, goal: Goal, topN: TopN) {
   if (goal === "shortlist") {
     const overlap = getOverlap(final, topN);
     const ratio = overlap / topN;
-    if (ratio >= 0.8) return "strong" as const;
-    if (ratio >= 0.67) return "good" as const;
+    if (ratio >= 0.67) return "strong" as const;
+    if (ratio >= 0.5) return "good" as const;
     return "weak" as const;
   }
   if (sigma < 0.3 && rankAcc > 0.85) return "strong" as const;
