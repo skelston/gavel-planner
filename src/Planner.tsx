@@ -474,6 +474,45 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
               </p>
             </div>
           </div>
+
+          <div className="card">
+            <div className="card-title">Understanding the metrics</div>
+            <div className="explainer">
+              <p>
+                The three accuracy metrics measure different things and have very different
+                difficulty levels:
+              </p>
+              <dl className="metric-list">
+                <dt>Rank accuracy</dt>
+                <dd>
+                  How well the overall ordering matches reality, measured across all projects.
+                  This tends to be the highest number because it benefits from easy separations
+                  in the middle and bottom of the leaderboard, where project quality differences
+                  are large.
+                </dd>
+                <dt>Top N overlap</dt>
+                <dd>
+                  How many of the true top N projects appear in your predicted top N, regardless
+                  of order within those N. Harder than rank accuracy because it only measures the
+                  top of the leaderboard, where projects tend to be closest in quality. Whether
+                  this is easier or harder than rank accuracy depends on N and the number of
+                  judges: with enough judges, top-5 overlap can approach rank accuracy, but top-1
+                  and top-3 typically lag behind.
+                </dd>
+                <dt>Top 1 correct</dt>
+                <dd>
+                  Whether the #1 project is correctly identified. This is a single yes/no
+                  question per simulation run, making it the hardest metric by far. Even with
+                  many judges, the true #1 and #2 are often close in quality, so a few noisy
+                  comparisons can swap them. Expect this to plateau well below 100%.
+                </dd>
+              </dl>
+              <p>
+                This is why pairwise judging is best used as a shortlisting tool (top N overlap)
+                rather than a precision instrument for picking a single winner (top 1).
+              </p>
+            </div>
+          </div>
         </>
       )}
     </>

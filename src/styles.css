@@ -381,6 +381,40 @@ body {
   color: var(--text);
 }
 
+.explainer ul {
+  margin-top: var(--space-sm);
+  padding-left: var(--space-lg);
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.explainer ul li + li {
+  margin-top: var(--space-xs);
+}
+
+.metric-list {
+  margin-top: var(--space-sm);
+}
+
+.metric-list dt {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: var(--space-md);
+}
+
+.metric-list dt:first-child {
+  margin-top: 0;
+}
+
+.metric-list dd {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.65;
+  margin-top: 2px;
+}
+
 /* Footer */
 .footer {
   margin-top: var(--space-2xl);
