@@ -3,7 +3,7 @@ import { simulate, type SimResult, type SimSnapshot } from "./lib/simulate";
 
 type Mode = "custom" | "recommend";
 type Goal = "shortlist" | "ranking";
-type TopN = 1 | 3 | 5;
+type TopN = 1 | 3 | 5 | "quarter" | "half";
 
 function InputField({
   label,
@@ -60,21 +60,29 @@ function getChartMetrics(goal: Goal, topN: TopN): ChartMetric[] {
   }
   if (topN === 1) {
     return [
-      { key: "top1Pct", label: "Top 1 correct", color: "var(--mint)", getValue: (s) => s.top1Pct },
-      { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s) => s.rankAccuracy },
+      { key: "top1Pct", label: "Top 1 correct", color: "var(--mint)", getValue: (s: SimSnapshot) => s.top1Pct },
+      { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s: SimSnapshot) => s.rankAccuracy },
     ];
   }
-  if (topN === 3) {
+  const n = typeof topN === "number" ? topN : 0;
+  if (n === 3) {
     return [
-      { key: "top3Ratio", label: "Top 3 overlap ratio", color: "var(--mint)", getValue: (s) => s.top3Overlap / 3 },
-      { key: "top1Pct", label: "Top 1 correct", color: "var(--violet)", getValue: (s) => s.top1Pct },
-      { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s) => s.rankAccuracy },
+      { key: "top3Ratio", label: "Top 3 overlap ratio", color: "var(--mint)", getValue: (s: SimSnapshot) => s.top3Overlap / 3 },
+      { key: "top1Pct", label: "Top 1 correct", color: "var(--violet)", getValue: (s: SimSnapshot) => s.top1Pct },
+      { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s: SimSnapshot) => s.rankAccuracy },
+    ];
+  }
+  if (n === 5) {
+    return [
+      { key: "top5Ratio", label: "Top 5 overlap ratio", color: "var(--mint)", getValue: (s: SimSnapshot) => s.top5Overlap / 5 },
+      { key: "top1Pct", label: "Top 1 correct", color: "var(--violet)", getValue: (s: SimSnapshot) => s.top1Pct },
+      { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s: SimSnapshot) => s.rankAccuracy },
     ];
   }
   return [
-    { key: "top5Ratio", label: "Top 5 overlap ratio", color: "var(--mint)", getValue: (s) => s.top5Overlap / 5 },
-    { key: "top1Pct", label: "Top 1 correct", color: "var(--violet)", getValue: (s) => s.top1Pct },
-    { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s) => s.rankAccuracy },
+    { key: "topNRatio", label: `Top ${topN === "quarter" ? "¼" : topN === "half" ? "½" : n} overlap ratio`, color: "var(--mint)", getValue: (s: SimSnapshot) => s.topNOverlap / s.topN },
+    { key: "top1Pct", label: "Top 1 correct", color: "var(--violet)", getValue: (s: SimSnapshot) => s.top1Pct },
+    { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s: SimSnapshot) => s.rankAccuracy },
   ];
 }
 
@@ -195,6 +203,9 @@ function SigmaChart({ snapshots }: { snapshots: SimSnapshot[] }) {
 }
 
 function ResultsTable({ result, goal, topN }: { result: SimResult; goal: Goal; topN: TopN }) {
+  const firstSnap = result.snapshots[0];
+  const n = firstSnap ? firstSnap.topN : (typeof topN === "number" ? topN : 5);
+
   return (
     <div className="results-wrap">
       <table className="results-table">
@@ -206,9 +217,8 @@ function ResultsTable({ result, goal, topN }: { result: SimResult; goal: Goal; t
             {goal === "shortlist" ? (
               <>
                 <th>Top 1</th>
-                {topN >= 3 && <th>Top 3 overlap</th>}
-                {topN >= 5 && <th>Top 5 overlap</th>}
-                <th>Top {topN} ratio</th>
+                <th>Top {n} overlap</th>
+                <th>Top {n} ratio</th>
               </>
             ) : (
               <>
@@ -222,7 +232,7 @@ function ResultsTable({ result, goal, topN }: { result: SimResult; goal: Goal; t
         <tbody>
           {result.snapshots.map((s) => {
             const overlap = getOverlap(s, topN);
-            const ratio = overlap / topN;
+            const ratio = overlap / s.topN;
             return (
               <tr key={s.votes}>
                 <td className="mono">{s.votes}</td>
@@ -237,8 +247,7 @@ function ResultsTable({ result, goal, topN }: { result: SimResult; goal: Goal; t
                 {goal === "shortlist" ? (
                   <>
                     <td className="mono">{(s.top1Pct * 100).toFixed(0)}%</td>
-                    {topN >= 3 && <td className="mono">{s.top3Overlap.toFixed(1)} / 3</td>}
-                    {topN >= 5 && <td className="mono">{s.top5Overlap.toFixed(1)} / 5</td>}
+                    <td className="mono">{s.topNOverlap.toFixed(1)} / {s.topN}</td>
                     <td className="mono">
                       {(ratio * 100).toFixed(0)}%
                       <Bar value={ratio} max={1} color="var(--mint)" />
@@ -260,10 +269,23 @@ function ResultsTable({ result, goal, topN }: { result: SimResult; goal: Goal; t
   );
 }
 
+function resolveTopN(topN: TopN, teams: number): number {
+  if (topN === "half") return Math.max(1, Math.floor(teams / 2));
+  if (topN === "quarter") return Math.max(1, Math.floor(teams / 4));
+  return topN;
+}
+
+function topNLabel(topN: TopN, teams?: number): string {
+  if (topN === "half") return teams ? `top ${Math.floor(teams / 2)}` : "top half";
+  if (topN === "quarter") return teams ? `top ${Math.floor(teams / 4)}` : "top quarter";
+  return `top ${topN}`;
+}
+
 function getOverlap(snap: SimSnapshot, topN: TopN): number {
   if (topN === 1) return snap.top1Pct;
   if (topN === 3) return snap.top3Overlap;
-  return snap.top5Overlap;
+  if (topN === 5) return snap.top5Overlap;
+  return snap.topNOverlap;
 }
 
 type Verdict = "strong" | "good" | "fair" | "weak";
@@ -277,7 +299,8 @@ function getVerdict(result: SimResult, goal: Goal, topN: TopN): Verdict | null {
 
   if (goal === "shortlist") {
     const overlap = getOverlap(final, topN);
-    const ratio = overlap / topN;
+    const n = typeof topN === "number" ? topN : final.topN;
+    const ratio = overlap / n;
     if (ratio >= 0.75) return "strong";
     if (ratio >= 0.65) return "good";
     if (ratio >= 0.55) return "fair";
@@ -297,11 +320,12 @@ function getVerdictCopy(verdict: Verdict, goal: Goal, topN: TopN, snap: SimSnaps
   const rankAcc = snap.rankAccuracy;
   const stats = `With ${totalVotes} total votes across ${nJudges} judges, `;
 
+  const n = snap.topN;
   let metric: string;
   if (goal === "shortlist") {
     metric = topN === 1
       ? `the true #1 project is correctly identified ${(overlap * 100).toFixed(0)}% of the time.`
-      : `on average ${overlap.toFixed(1)} of the true top ${topN} projects will appear in your top ${topN}.`;
+      : `on average ${overlap.toFixed(1)} of the true top ${n} projects will appear in your top ${n}.`;
   } else {
     metric = `overall rank accuracy is ${(rankAcc * 100).toFixed(0)}%. `
       + `However, this is driven largely by easy separations in the bottom half. `
@@ -367,16 +391,17 @@ function toMarkdown(result: SimResult, goal: Goal, topN: TopN, params: { teams: 
     `| Judges | ${params.judges} |`,
     `| Total time | ${params.minutes} min |`,
     `| Per vote | ${params.perVote} min |`,
-    `| Goal | ${goal === "shortlist" ? `Shortlist (top ${topN})` : "Full ranking"} |`,
+    `| Goal | ${goal === "shortlist" ? `Shortlist (${topNLabel(topN, params.teams)})` : "Full ranking"} |`,
     ``,
     `**${labels[verdict!]} confidence** — ${result.totalVotes} total votes, ${result.votesPerJudge} per judge.`,
   ];
 
+  const n = final.topN;
   if (goal === "shortlist") {
     if (topN === 1) {
       lines.push(`Top 1 accuracy: ${(overlap * 100).toFixed(0)}%.`);
     } else {
-      lines.push(`Top ${topN} overlap: ${overlap.toFixed(1)} / ${topN} (${(overlap / topN * 100).toFixed(0)}%).`);
+      lines.push(`Top ${n} overlap: ${overlap.toFixed(1)} / ${n} (${(overlap / n * 100).toFixed(0)}%).`);
     }
   } else {
     lines.push(`Rank accuracy: ${(final.rankAccuracy * 100).toFixed(0)}%. Avg sigma: ${final.avgSigma.toFixed(3)}.`);
@@ -386,10 +411,10 @@ function toMarkdown(result: SimResult, goal: Goal, topN: TopN, params: { teams: 
   lines.push(``);
 
   if (goal === "shortlist") {
-    lines.push(`| Votes | Sigma | Rank acc. | Top 1 | Top ${topN} ratio |`);
+    lines.push(`| Votes | Sigma | Rank acc. | Top 1 | Top ${n} ratio |`);
     lines.push(`|---|---|---|---|---|`);
     for (const s of result.snapshots) {
-      const r = getOverlap(s, topN) / topN;
+      const r = s.topNOverlap / s.topN;
       lines.push(`| ${s.votes} | ${s.avgSigma.toFixed(3)} | ${(s.rankAccuracy * 100).toFixed(0)}% | ${(s.top1Pct * 100).toFixed(0)}% | ${(r * 100).toFixed(0)}% |`);
     }
   } else {
@@ -427,16 +452,17 @@ function CopyButton({ result, goal, topN, params }: { result: SimResult; goal: G
 const MAX_JUDGES = 50;
 
 function findMinJudges(teams: number, minutes: number, perVote: number, goal: Goal, topN: TopN): { judges: number; result: SimResult } {
+  const n = resolveTopN(topN, teams);
   let lo = 2;
   let hi = Math.min(MAX_JUDGES, Math.max(4, Math.ceil(teams * 1.5)));
   let bestJudges = hi;
-  let bestResult = simulate(teams, hi, minutes, perVote, 60);
+  let bestResult = simulate(teams, hi, minutes, perVote, 60, n);
 
   if (!meetsThreshold(bestResult, goal, topN)) {
-    while (hi < MAX_JUDGES && !meetsThreshold(simulate(teams, hi, minutes, perVote, 60), goal, topN)) {
+    while (hi < MAX_JUDGES && !meetsThreshold(simulate(teams, hi, minutes, perVote, 60, n), goal, topN)) {
       hi = Math.min(hi * 2, MAX_JUDGES);
     }
-    bestResult = simulate(teams, hi, minutes, perVote, 60);
+    bestResult = simulate(teams, hi, minutes, perVote, 60, n);
     bestJudges = hi;
     if (!meetsThreshold(bestResult, goal, topN)) {
       return { judges: hi, result: bestResult };
@@ -445,7 +471,7 @@ function findMinJudges(teams: number, minutes: number, perVote: number, goal: Go
 
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
-    const r = simulate(teams, mid, minutes, perVote, 60);
+    const r = simulate(teams, mid, minutes, perVote, 60, n);
     if (meetsThreshold(r, goal, topN)) {
       hi = mid;
       bestJudges = mid;
@@ -469,7 +495,7 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
   function handleRun() {
     setRunning(true);
     setTimeout(() => {
-      setResult(simulate(teams, judges, minutes, perVote, 100));
+      setResult(simulate(teams, judges, minutes, perVote, 100, resolveTopN(topN, teams)));
       setRunning(false);
     }, 50);
   }
@@ -525,7 +551,7 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
             <div className="card-title">Detailed results</div>
             <p className="card-desc">
               {goal === "shortlist"
-                ? `Top ${topN} ratio is the key metric: what fraction of the true top ${topN} projects appear in your predicted top ${topN}. Averaged over 100 simulated events.`
+                ? `Overlap ratio is the key metric: what fraction of the true ${topNLabel(topN, teams)} projects appear in your predicted ${topNLabel(topN, teams)}. Averaged over 100 simulated events.`
                 : "Rank accuracy reflects overall ordering (inflated by easy bottom-half separations). Check top-N overlap for how reliable the top actually is. Averaged over 100 simulated events."}
             </p>
             <ResultsTable result={result} goal={goal} topN={topN} />
@@ -631,7 +657,7 @@ function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
           Enter your event size and time window. The planner will find the minimum number of
           judges needed for{" "}
           {goal === "shortlist"
-            ? `reliably identifying the top ${topN} project${topN > 1 ? "s" : ""}`
+            ? `reliably identifying the ${topNLabel(topN, teams)} projects`
             : "accurate full rankings"}.
         </p>
         <div className="fields">
@@ -664,7 +690,7 @@ function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
                     {goal === "shortlist"
                       ? topN === 1
                         ? ` Top 1 accuracy: ${(overlap * 100).toFixed(0)}%.`
-                        : ` Top ${topN} overlap: ${overlap.toFixed(1)} / ${topN}.`
+                        : ` ${topNLabel(topN, teams).charAt(0).toUpperCase() + topNLabel(topN, teams).slice(1)} overlap: ${overlap.toFixed(1)} / ${final.topN}.`
                       : ` Rank accuracy: ${(final.rankAccuracy * 100).toFixed(0)}%.`}
                   </div>
                 </div>
@@ -678,7 +704,7 @@ function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
                     {teams > 40 ? (
                       <>
                         With {teams} teams, pairwise judging alone can't reliably{" "}
-                        {goal === "shortlist" ? `identify a precise top ${topN}` : "produce accurate full rankings"}{" "}
+                        {goal === "shortlist" ? `identify a precise ${topNLabel(topN, teams)}` : "produce accurate full rankings"}{" "}
                         in {minutes} minutes. At this scale, consider:
                         <ul style={{ margin: "8px 0 0 16px", lineHeight: 1.7 }}>
                           <li>
@@ -699,7 +725,7 @@ function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
                     ) : (
                       <>
                         Even with {recommendation.judges} judges, {minutes} minutes at {perVote} min/vote
-                        isn't enough for {goal === "shortlist" ? `reliable top-${topN} identification` : "accurate rankings"} with {teams} teams.
+                        isn't enough for {goal === "shortlist" ? `reliable ${topNLabel(topN, teams)} identification` : "accurate rankings"} with {teams} teams.
                         Try increasing the judging window, reducing time per vote, or adding more judges.
                       </>
                     )}
@@ -769,13 +795,13 @@ export function Planner() {
         {goal === "shortlist" && (
           <>
             <span style={{ color: "var(--dim)", fontSize: 12, marginLeft: 4 }}>Top</span>
-            {([1, 3, 5] as TopN[]).map((n) => (
+            {([1, 3, 5, "quarter", "half"] as TopN[]).map((n) => (
               <button
-                key={n}
+                key={String(n)}
                 className={`goal-btn ${topN === n ? "active" : ""}`}
                 onClick={() => setTopN(n)}
               >
-                {n}
+                {n === "quarter" ? "¼" : n === "half" ? "½" : n}
               </button>
             ))}
           </>

@@ -17,6 +17,8 @@ export type SimSnapshot = {
   top5ExactPct: number;
   top3Overlap: number;
   top5Overlap: number;
+  topNOverlap: number;
+  topN: number;
 };
 
 export type SimResult = {
@@ -122,6 +124,7 @@ function runOne(
   totalMinutes: number,
   minutesPerVote: number,
   seed: number,
+  topN: number,
 ) {
   const rng = new Rng(seed);
   const qualities = trueQuality(nTeams);
@@ -186,6 +189,8 @@ function runOne(
         top5ExactPct: setOverlap(predicted, trueRanking, 5) === 5 ? 1 : 0,
         top3Overlap: setOverlap(predicted, trueRanking, 3),
         top5Overlap: setOverlap(predicted, trueRanking, 5),
+        topNOverlap: setOverlap(predicted, trueRanking, topN),
+        topN,
       });
     }
   }
@@ -203,13 +208,15 @@ export function simulate(
   totalMinutes: number,
   minutesPerVote: number,
   nRuns = 100,
+  topN = 5,
 ): SimResult {
+  const clampedTopN = Math.max(1, Math.min(topN, nTeams));
   const allSnapshots: SimSnapshot[][] = [];
   let totalMinSeen = 0;
   let totalAvgSeen = 0;
 
   for (let run = 0; run < nRuns; run++) {
-    const result = runOne(nTeams, nJudges, totalMinutes, minutesPerVote, run * 7919 + 42);
+    const result = runOne(nTeams, nJudges, totalMinutes, minutesPerVote, run * 7919 + 42, clampedTopN);
     allSnapshots.push(result.snapshots);
     totalMinSeen += result.minSeen;
     totalAvgSeen += result.avgSeen;
@@ -219,7 +226,7 @@ export function simulate(
   const averaged: SimSnapshot[] = [];
   for (let i = 0; i < nSnaps; i++) {
     const votes = allSnapshots[0][i].votes;
-    let avgSigma = 0, rankAcc = 0, top1 = 0, top3e = 0, top5e = 0, top3o = 0, top5o = 0;
+    let avgSigma = 0, rankAcc = 0, top1 = 0, top3e = 0, top5e = 0, top3o = 0, top5o = 0, topNo = 0;
     for (const snaps of allSnapshots) {
       avgSigma += snaps[i].avgSigma;
       rankAcc += snaps[i].rankAccuracy;
@@ -228,6 +235,7 @@ export function simulate(
       top5e += snaps[i].top5ExactPct;
       top3o += snaps[i].top3Overlap;
       top5o += snaps[i].top5Overlap;
+      topNo += snaps[i].topNOverlap;
     }
     averaged.push({
       votes,
@@ -238,6 +246,8 @@ export function simulate(
       top5ExactPct: top5e / nRuns,
       top3Overlap: top3o / nRuns,
       top5Overlap: top5o / nRuns,
+      topNOverlap: topNo / nRuns,
+      topN: clampedTopN,
     });
   }
 
