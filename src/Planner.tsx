@@ -49,7 +49,36 @@ function Bar({ value, max, color }: { value: number; max: number; color: string 
   );
 }
 
-function ConvergenceChart({ snapshots }: { snapshots: SimSnapshot[] }) {
+type ChartMetric = { key: string; label: string; color: string; getValue: (s: SimSnapshot) => number };
+
+function getChartMetrics(goal: Goal, topN: TopN): ChartMetric[] {
+  if (goal === "ranking") {
+    return [
+      { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s) => s.rankAccuracy },
+      { key: "top1Pct", label: "Top 1 correct", color: "var(--mint)", getValue: (s) => s.top1Pct },
+    ];
+  }
+  if (topN === 1) {
+    return [
+      { key: "top1Pct", label: "Top 1 correct", color: "var(--mint)", getValue: (s) => s.top1Pct },
+      { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s) => s.rankAccuracy },
+    ];
+  }
+  if (topN === 3) {
+    return [
+      { key: "top3Ratio", label: "Top 3 overlap ratio", color: "var(--mint)", getValue: (s) => s.top3Overlap / 3 },
+      { key: "top1Pct", label: "Top 1 correct", color: "var(--violet)", getValue: (s) => s.top1Pct },
+      { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s) => s.rankAccuracy },
+    ];
+  }
+  return [
+    { key: "top5Ratio", label: "Top 5 overlap ratio", color: "var(--mint)", getValue: (s) => s.top5Overlap / 5 },
+    { key: "top1Pct", label: "Top 1 correct", color: "var(--violet)", getValue: (s) => s.top1Pct },
+    { key: "rankAccuracy", label: "Rank accuracy", color: "var(--indigo)", getValue: (s) => s.rankAccuracy },
+  ];
+}
+
+function ConvergenceChart({ snapshots, goal, topN }: { snapshots: SimSnapshot[]; goal: Goal; topN: TopN }) {
   if (snapshots.length === 0) return null;
 
   const maxVotes = snapshots[snapshots.length - 1].votes;
@@ -65,15 +94,11 @@ function ConvergenceChart({ snapshots }: { snapshots: SimSnapshot[] }) {
   const x = (votes: number) => padL + (votes / maxVotes) * innerW;
   const y = (val: number) => padT + innerH - val * innerH;
 
-  const metrics = [
-    { key: "rankAccuracy" as const, label: "Rank accuracy", color: "var(--indigo)" },
-    { key: "top1Pct" as const, label: "Top 1 correct", color: "var(--mint)" },
-    { key: "top3ExactPct" as const, label: "Top 3 exact", color: "var(--violet)" },
-  ];
+  const metrics = getChartMetrics(goal, topN);
 
-  const pathD = (key: "rankAccuracy" | "top1Pct" | "top3ExactPct") =>
+  const pathD = (metric: ChartMetric) =>
     snapshots
-      .map((s, i) => `${i === 0 ? "M" : "L"}${x(s.votes).toFixed(1)},${y(s[key]).toFixed(1)}`)
+      .map((s, i) => `${i === 0 ? "M" : "L"}${x(s.votes).toFixed(1)},${y(metric.getValue(s)).toFixed(1)}`)
       .join(" ");
 
   const yTicks = [0, 0.25, 0.5, 0.75, 1.0];
@@ -95,11 +120,11 @@ function ConvergenceChart({ snapshots }: { snapshots: SimSnapshot[] }) {
           </text>
         ))}
         {metrics.map((m) => (
-          <path key={m.key} d={pathD(m.key)} fill="none" stroke={m.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <path key={m.key} d={pathD(m)} fill="none" stroke={m.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         ))}
         {metrics.map((m) =>
           snapshots.map((s) => (
-            <circle key={`${m.key}-${s.votes}`} cx={x(s.votes)} cy={y(s[m.key])} r={3} fill={m.color} />
+            <circle key={`${m.key}-${s.votes}`} cx={x(s.votes)} cy={y(m.getValue(s))} r={3} fill={m.color} />
           )),
         )}
       </svg>
@@ -169,7 +194,7 @@ function SigmaChart({ snapshots }: { snapshots: SimSnapshot[] }) {
   );
 }
 
-function ResultsTable({ result }: { result: SimResult }) {
+function ResultsTable({ result, goal, topN }: { result: SimResult; goal: Goal; topN: TopN }) {
   return (
     <div className="results-wrap">
       <table className="results-table">
@@ -178,32 +203,57 @@ function ResultsTable({ result }: { result: SimResult }) {
             <th>Votes</th>
             <th>Avg sigma</th>
             <th>Rank acc.</th>
-            <th>Top 1</th>
-            <th>Top 3 exact</th>
-            <th>Top 5 exact</th>
-            <th>Top 3 overlap</th>
-            <th>Top 5 overlap</th>
+            {goal === "shortlist" ? (
+              <>
+                <th>Top 1</th>
+                {topN >= 3 && <th>Top 3 overlap</th>}
+                {topN >= 5 && <th>Top 5 overlap</th>}
+                <th>Top {topN} ratio</th>
+              </>
+            ) : (
+              <>
+                <th>Top 1</th>
+                <th>Top 3 overlap</th>
+                <th>Top 5 overlap</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
-          {result.snapshots.map((s) => (
-            <tr key={s.votes}>
-              <td className="mono">{s.votes}</td>
-              <td className="mono">
-                {s.avgSigma.toFixed(3)}
-                <Bar value={1 - s.avgSigma} max={1} color="var(--mint)" />
-              </td>
-              <td className="mono">
-                {(s.rankAccuracy * 100).toFixed(0)}%
-                <Bar value={s.rankAccuracy} max={1} color="var(--indigo)" />
-              </td>
-              <td className="mono">{(s.top1Pct * 100).toFixed(0)}%</td>
-              <td className="mono">{(s.top3ExactPct * 100).toFixed(0)}%</td>
-              <td className="mono">{(s.top5ExactPct * 100).toFixed(0)}%</td>
-              <td className="mono">{s.top3Overlap.toFixed(1)} / 3</td>
-              <td className="mono">{s.top5Overlap.toFixed(1)} / 5</td>
-            </tr>
-          ))}
+          {result.snapshots.map((s) => {
+            const overlap = getOverlap(s, topN);
+            const ratio = overlap / topN;
+            return (
+              <tr key={s.votes}>
+                <td className="mono">{s.votes}</td>
+                <td className="mono">
+                  {s.avgSigma.toFixed(3)}
+                  <Bar value={1 - s.avgSigma} max={1} color="var(--mint)" />
+                </td>
+                <td className="mono">
+                  {(s.rankAccuracy * 100).toFixed(0)}%
+                  <Bar value={s.rankAccuracy} max={1} color="var(--indigo)" />
+                </td>
+                {goal === "shortlist" ? (
+                  <>
+                    <td className="mono">{(s.top1Pct * 100).toFixed(0)}%</td>
+                    {topN >= 3 && <td className="mono">{s.top3Overlap.toFixed(1)} / 3</td>}
+                    {topN >= 5 && <td className="mono">{s.top5Overlap.toFixed(1)} / 5</td>}
+                    <td className="mono">
+                      {(ratio * 100).toFixed(0)}%
+                      <Bar value={ratio} max={1} color="var(--mint)" />
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="mono">{(s.top1Pct * 100).toFixed(0)}%</td>
+                    <td className="mono">{s.top3Overlap.toFixed(1)} / 3</td>
+                    <td className="mono">{s.top5Overlap.toFixed(1)} / 5</td>
+                  </>
+                )}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -376,7 +426,7 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
               human preferences are inherently noisy: two judges can reasonably disagree about
               similar-quality projects.
             </p>
-            <ConvergenceChart snapshots={result.snapshots} />
+            <ConvergenceChart snapshots={result.snapshots} goal={goal} topN={topN} />
           </div>
 
           <div className="card">
@@ -392,12 +442,11 @@ function CustomMode({ goal, topN }: { goal: Goal; topN: TopN }) {
           <div className="card">
             <div className="card-title">Detailed results</div>
             <p className="card-desc">
-              <strong>Exact set match</strong> means all N projects in your top N are correct
-              (getting 2 of 3 right scores 0%). <strong>Overlap</strong> counts how many of
-              the true top N appear in your predicted top N, regardless of order. Averaged
-              over 100 simulated events.
+              {goal === "shortlist"
+                ? `Top ${topN} ratio is the key metric: what fraction of the true top ${topN} projects appear in your predicted top ${topN}. Averaged over 100 simulated events.`
+                : "Rank accuracy and sigma are the key metrics. Averaged over 100 simulated events."}
             </p>
-            <ResultsTable result={result} />
+            <ResultsTable result={result} goal={goal} topN={topN} />
           </div>
 
           <div className="card">
@@ -510,7 +559,7 @@ function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
 
             <div className="card">
               <div className="card-title">Accuracy over time</div>
-              <ConvergenceChart snapshots={recommendation.result.snapshots} />
+              <ConvergenceChart snapshots={recommendation.result.snapshots} goal={goal} topN={topN} />
             </div>
 
             <div className="card">
@@ -520,7 +569,7 @@ function RecommendMode({ goal, topN }: { goal: Goal; topN: TopN }) {
 
             <div className="card">
               <div className="card-title">Detailed results</div>
-              <ResultsTable result={recommendation.result} />
+              <ResultsTable result={recommendation.result} goal={goal} topN={topN} />
             </div>
           </>
         );
