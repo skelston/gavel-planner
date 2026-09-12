@@ -218,12 +218,12 @@ function getVerdict(result: SimResult, goal: Goal) {
   const top3 = final.top3Overlap;
 
   if (goal === "shortlist") {
-    if (top3 >= 2.7 && sigma < 0.35) return "strong" as const;
-    if (top3 >= 2.3 && sigma < 0.5) return "good" as const;
+    if (top3 >= 2.0) return "strong" as const;
+    if (top3 >= 1.5) return "good" as const;
     return "weak" as const;
   }
   if (sigma < 0.3 && rankAcc > 0.85) return "strong" as const;
-  if (sigma < 0.45 && rankAcc > 0.8) return "good" as const;
+  if (sigma < 0.5 && rankAcc > 0.75) return "good" as const;
   return "weak" as const;
 }
 
