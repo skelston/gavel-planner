@@ -155,7 +155,7 @@ function SigmaChart({ snapshots }: { snapshots: SimSnapshot[] }) {
   const innerH = chartH - padT - padB;
 
   const x = (votes: number) => padL + (votes / maxVotes) * innerW;
-  const y = (val: number) => padT + (val / maxSigma) * innerH;
+  const y = (val: number) => padT + innerH - (val / maxSigma) * innerH;
 
   const yTicks = [0, 0.25, 0.5, 0.75, 1.0];
 
