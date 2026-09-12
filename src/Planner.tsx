@@ -342,7 +342,7 @@ function VerdictCard({ result, goal, topN }: { result: SimResult; goal: Goal; to
 
 function meetsThreshold(result: SimResult, goal: Goal, topN: TopN): boolean {
   const v = getVerdict(result, goal, topN);
-  return v === "strong" || v === "good" || v === "fair";
+  return v === "strong" || v === "good";
 }
 
 function findMinJudges(teams: number, minutes: number, perVote: number, goal: Goal, topN: TopN): { judges: number; result: SimResult } {
